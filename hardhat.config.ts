@@ -1,9 +1,11 @@
-import "@nomiclabs/hardhat-waffle";
 import "@typechain/hardhat";
+import "@nomiclabs/hardhat-ethers";
+import "@nomiclabs/hardhat-waffle";
+import "@nomiclabs/hardhat-etherscan";
 import "hardhat-gas-reporter";
 import "solidity-coverage";
-import "@nomiclabs/hardhat-etherscan";
-import "@nomiclabs/hardhat-ethers";
+import "@openzeppelin/hardhat-upgrades";
+
 import "hardhat-deploy";
 
 import { resolve } from "path";
@@ -16,28 +18,21 @@ dotenvConfig({ path: resolve(__dirname, "./.env") });
 
 const chainIds = {
     goerli: 5,
-    hardhat: 31337,
+    hardhat: 1337,
     kovan: 42,
     mainnet: 1,
     rinkeby: 4,
     ropsten: 3,
-    matic: 137,
 };
 
 // Ensure that we have all the environment variables we need.
-//const mnemonic: string | undefined = process.env.MNEMONIC ?? "NO_MNEMONIC";
-const privateKey: string | undefined = process.env.PRIVATE_KEY ?? "NO_PRIVATE_KEY";
+const privateKey = process.env.PRIVATE_KEY ?? "NO_PRIVATE_KEY";
 // Make sure node is setup on Alchemy website
-const alchemyApiKey: string | undefined = process.env.ALCHEMY_API_KEY ?? "NO_ALCHEMY_API_KEY";
+const alchemyApiKey = process.env.ALCHEMY_API_KEY ?? "NO_ALCHEMY_API_KEY";
 
 function getChainConfig(network: keyof typeof chainIds): NetworkUserConfig {
     const url = `https://eth-${network}.alchemyapi.io/v2/${alchemyApiKey}`;
     return {
-        //accounts: {
-        //    count: 10,
-        //    mnemonic,
-        //    path: "m/44'/60'/0'/0",
-        //},
         accounts: [`${privateKey}`],
         chainId: chainIds[network],
         url,
@@ -45,7 +40,7 @@ function getChainConfig(network: keyof typeof chainIds): NetworkUserConfig {
 }
 
 const config: HardhatUserConfig = {
-    defaultNetwork: "matic",
+    defaultNetwork: "hardhat",
     gasReporter: {
         currency: "USD",
         enabled: process.env.REPORT_GAS ? true : false,
@@ -53,15 +48,14 @@ const config: HardhatUserConfig = {
         src: "./contracts",
     },
     networks: {
-        matic: {
-            url: "https://polygon-rpc.com",
-            //accounts: {
-            //    mnemonic,
-            //},
-            chainId: chainIds.matic,
-            accounts: [privateKey],
+        hardhat: {
+            forking: {
+                url: `https://eth-mainnet.alchemyapi.io/v2/${alchemyApiKey}`,
+            },
+            chainId: chainIds.hardhat,
         },
-        // Uncomment for testing.
+        // Uncomment for testing. Commented due to CI issues
+        // mainnet: getChainConfig("mainnet"),
         // rinkeby: getChainConfig("rinkeby"),
         // ropsten: getChainConfig("ropsten"),
     },
@@ -76,6 +70,30 @@ const config: HardhatUserConfig = {
     solidity: {
         compilers: [
             {
+                version: "0.8.10",
+                settings: {
+                    metadata: {
+                        bytecodeHash: "none",
+                    },
+                    optimizer: {
+                        enabled: true,
+                        runs: 800,
+                    },
+                },
+            },
+            {
+                version: "0.8.10",
+                settings: {
+                    metadata: {
+                        bytecodeHash: "none",
+                    },
+                    optimizer: {
+                        enabled: true,
+                        runs: 800,
+                    },
+                },
+            },
+            {
                 version: "0.7.5",
                 settings: {
                     metadata: {
@@ -89,6 +107,18 @@ const config: HardhatUserConfig = {
             },
             {
                 version: "0.5.16",
+            },
+            {
+                version: "0.8.10",
+                settings: {
+                    metadata: {
+                        bytecodeHash: "none",
+                    },
+                    optimizer: {
+                        enabled: true,
+                        runs: 800,
+                    },
+                },
             },
         ],
         settings: {
@@ -111,6 +141,12 @@ const config: HardhatUserConfig = {
     typechain: {
         outDir: "types",
         target: "ethers-v5",
+    },
+    etherscan: {
+        apiKey: process.env.ETHERSCAN_API_KEY,
+    },
+    mocha: {
+        timeout: 1000000,
     },
 };
 
