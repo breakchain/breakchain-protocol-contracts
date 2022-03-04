@@ -1,12 +1,674 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+
+// File: contracts/interfaces/INoteKeeper.sol
+
+
+pragma solidity >=0.7.5;
+
+interface INoteKeeper {
+    // Info for market note
+    struct Note {
+        uint256 payout; // gOHM remaining to be paid
+        uint48 created; // time market was created
+        uint48 matured; // timestamp when market is matured
+        uint48 redeemed; // time market was redeemed
+        uint48 marketID; // market ID of deposit. uint48 to avoid adding a slot.
+    }
+
+    function redeem(
+        address _user,
+        uint256[] memory _indexes,
+        bool _sendgOHM
+    ) external returns (uint256);
+
+    function redeemAll(address _user, bool _sendgOHM) external returns (uint256);
+
+    function pushNote(address to, uint256 index) external;
+
+    function pullNote(address from, uint256 index) external returns (uint256 newIndex_);
+
+    function indexesFor(address _user) external view returns (uint256[] memory);
+
+    function pendingFor(address _user, uint256 _index) external view returns (uint256 payout_, bool matured_);
+}
+
+// File: contracts/interfaces/ITreasury.sol
+
+
+pragma solidity >=0.7.5;
+
+interface ITreasury {
+    function deposit(
+        uint256 _amount,
+        address _token,
+        uint256 _profit
+    ) external returns (uint256);
+
+    function withdraw(uint256 _amount, address _token) external;
+
+    function tokenValue(address _token, uint256 _amount) external view returns (uint256 value_);
+
+    function mint(address _recipient, uint256 _amount) external;
+
+    function manage(address _token, uint256 _amount) external;
+
+    function incurDebt(uint256 amount_, address token_) external;
+
+    function repayDebtWithReserve(uint256 amount_, address token_) external;
+
+    function excessReserves() external view returns (uint256);
+
+    function baseSupply() external view returns (uint256);
+}
+
+// File: contracts/interfaces/IStaking.sol
+
+
+pragma solidity >=0.7.5;
+
+interface IStaking {
+    function stake(
+        address _to,
+        uint256 _amount,
+        bool _rebasing,
+        bool _claim
+    ) external returns (uint256);
+
+    function claim(address _recipient, bool _rebasing) external returns (uint256);
+
+    function forfeit() external returns (uint256);
+
+    function toggleLock() external;
+
+    function unstake(
+        address _to,
+        uint256 _amount,
+        bool _trigger,
+        bool _rebasing
+    ) external returns (uint256);
+
+    function wrap(address _to, uint256 _amount) external returns (uint256 gBalance_);
+
+    function unwrap(address _to, uint256 _amount) external returns (uint256 sBalance_);
+
+    function rebase() external;
+
+    function index() external view returns (uint256);
+
+    function contractBalance() external view returns (uint256);
+
+    function totalStaked() external view returns (uint256);
+
+    function supplyInWarmup() external view returns (uint256);
+}
+
+// File: contracts/interfaces/IERC20.sol
+
+
+pragma solidity >=0.7.5;
+
+interface IERC20 {
+    function totalSupply() external view returns (uint256);
+
+    function balanceOf(address account) external view returns (uint256);
+
+    function transfer(address recipient, uint256 amount) external returns (bool);
+
+    function allowance(address owner, address spender) external view returns (uint256);
+
+    function approve(address spender, uint256 amount) external returns (bool);
+
+    function transferFrom(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) external returns (bool);
+
+    event Transfer(address indexed from, address indexed to, uint256 value);
+
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+}
+
+// File: contracts/interfaces/IBondDepository.sol
+
+
+pragma solidity >=0.7.5;
+
+
+interface IBondDepository {
+    // Info about each type of market
+    struct Market {
+        uint256 capacity; // capacity remaining
+        IERC20 quoteToken; // token to accept as payment
+        bool capacityInQuote; // capacity limit is in payment token (true) or in OHM (false, default)
+        uint64 totalDebt; // total debt from market
+        uint64 maxPayout; // max tokens in/out (determined by capacityInQuote false/true, respectively)
+        uint64 sold; // base tokens out
+        uint256 purchased; // quote tokens in
+    }
+
+    // Info for creating new markets
+    struct Terms {
+        bool fixedTerm; // fixed term or fixed expiration
+        uint64 controlVariable; // scaling variable for price
+        uint48 vesting; // length of time from deposit to maturity if fixed-term
+        uint48 conclusion; // timestamp when market no longer offered (doubles as time when market matures if fixed-expiry)
+        uint64 maxDebt; // 9 decimal debt maximum in OHM
+    }
+
+    // Additional info about market.
+    struct Metadata {
+        uint48 lastTune; // last timestamp when control variable was tuned
+        uint48 lastDecay; // last timestamp when market was created and debt was decayed
+        uint48 length; // time from creation to conclusion. used as speed to decay debt.
+        uint48 depositInterval; // target frequency of deposits
+        uint48 tuneInterval; // frequency of tuning
+        uint8 quoteDecimals; // decimals of quote token
+    }
+
+    // Control variable adjustment data
+    struct Adjustment {
+        uint64 change;
+        uint48 lastAdjustment;
+        uint48 timeToAdjusted;
+        bool active;
+    }
+
+    /**
+     * @notice deposit market
+     * @param _bid uint256
+     * @param _amount uint256
+     * @param _maxPrice uint256
+     * @param _user address
+     * @param _referral address
+     * @return payout_ uint256
+     * @return expiry_ uint256
+     * @return index_ uint256
+     */
+    function deposit(
+        uint256 _bid,
+        uint256 _amount,
+        uint256 _maxPrice,
+        address _user,
+        address _referral
+    )
+        external
+        returns (
+            uint256 payout_,
+            uint256 expiry_,
+            uint256 index_
+        );
+
+    function create(
+        IERC20 _quoteToken, // token used to deposit
+        uint256[3] memory _market, // [capacity, initial price]
+        bool[2] memory _booleans, // [capacity in quote, fixed term]
+        uint256[2] memory _terms, // [vesting, conclusion]
+        uint32[2] memory _intervals // [deposit interval, tune interval]
+    ) external returns (uint256 id_);
+
+    function close(uint256 _id) external;
+
+    function isLive(uint256 _bid) external view returns (bool);
+
+    function liveMarkets() external view returns (uint256[] memory);
+
+    function liveMarketsFor(address _quoteToken) external view returns (uint256[] memory);
+
+    function payoutFor(uint256 _amount, uint256 _bid) external view returns (uint256);
+
+    function marketPrice(uint256 _bid) external view returns (uint256);
+
+    function currentDebt(uint256 _bid) external view returns (uint256);
+
+    function debtRatio(uint256 _bid) external view returns (uint256);
+
+    function debtDecay(uint256 _bid) external view returns (uint64);
+}
+
+// File: contracts/interfaces/IERC20Metadata.sol
+
+
+pragma solidity >=0.7.5;
+
+
+interface IERC20Metadata is IERC20 {
+    function name() external view returns (string memory);
+
+    function symbol() external view returns (string memory);
+
+    function decimals() external view returns (uint8);
+}
+
+// File: contracts/libraries/SafeERC20.sol
+
+
+pragma solidity >=0.7.5;
+
+
+/// @notice Safe IERC20 and ETH transfer library that safely handles missing return values.
+/// @author Modified from Uniswap (https://github.com/Uniswap/uniswap-v3-periphery/blob/main/contracts/libraries/TransferHelper.sol)
+/// Taken from Solmate
+library SafeERC20 {
+    function safeTransferFrom(
+        IERC20 token,
+        address from,
+        address to,
+        uint256 amount
+    ) internal {
+        (bool success, bytes memory data) = address(token).call(
+            abi.encodeWithSelector(IERC20.transferFrom.selector, from, to, amount)
+        );
+
+        require(success && (data.length == 0 || abi.decode(data, (bool))), "TRANSFER_FROM_FAILED");
+    }
+
+    function safeTransfer(
+        IERC20 token,
+        address to,
+        uint256 amount
+    ) internal {
+        (bool success, bytes memory data) = address(token).call(
+            abi.encodeWithSelector(IERC20.transfer.selector, to, amount)
+        );
+
+        require(success && (data.length == 0 || abi.decode(data, (bool))), "TRANSFER_FAILED");
+    }
+
+    function safeApprove(
+        IERC20 token,
+        address to,
+        uint256 amount
+    ) internal {
+        (bool success, bytes memory data) = address(token).call(
+            abi.encodeWithSelector(IERC20.approve.selector, to, amount)
+        );
+
+        require(success && (data.length == 0 || abi.decode(data, (bool))), "APPROVE_FAILED");
+    }
+
+    function safeTransferETH(address to, uint256 amount) internal {
+        (bool success, ) = to.call{value: amount}(new bytes(0));
+
+        require(success, "ETH_TRANSFER_FAILED");
+    }
+}
+
+// File: contracts/interfaces/IgOHM.sol
+
+
+pragma solidity >=0.7.5;
+
+
+interface IgOHM is IERC20 {
+    function mint(address _to, uint256 _amount) external;
+
+    function burn(address _from, uint256 _amount) external;
+
+    function index() external view returns (uint256);
+
+    function balanceFrom(uint256 _amount) external view returns (uint256);
+
+    function balanceTo(uint256 _amount) external view returns (uint256);
+
+    function migrate(address _staking, address _sOHM) external;
+}
+
+// File: contracts/interfaces/IOlympusAuthority.sol
+
+
+pragma solidity >=0.7.5;
+
+interface IOlympusAuthority {
+    /* ========== EVENTS ========== */
+
+    event GovernorPushed(address indexed from, address indexed to, bool _effectiveImmediately);
+    event GuardianPushed(address indexed from, address indexed to, bool _effectiveImmediately);
+    event PolicyPushed(address indexed from, address indexed to, bool _effectiveImmediately);
+    event VaultPushed(address indexed from, address indexed to, bool _effectiveImmediately);
+
+    event GovernorPulled(address indexed from, address indexed to);
+    event GuardianPulled(address indexed from, address indexed to);
+    event PolicyPulled(address indexed from, address indexed to);
+    event VaultPulled(address indexed from, address indexed to);
+
+    /* ========== VIEW ========== */
+
+    function governor() external view returns (address);
+
+    function guardian() external view returns (address);
+
+    function policy() external view returns (address);
+
+    function vault() external view returns (address);
+}
+
+// File: contracts/types/OlympusAccessControlled.sol
+
+
+pragma solidity >=0.7.5;
+
+
+abstract contract OlympusAccessControlled {
+    /* ========== EVENTS ========== */
+
+    event AuthorityUpdated(IOlympusAuthority indexed authority);
+
+    string UNAUTHORIZED = "UNAUTHORIZED"; // save gas
+
+    /* ========== STATE VARIABLES ========== */
+
+    IOlympusAuthority public authority;
+
+    /* ========== Constructor ========== */
+
+    constructor(IOlympusAuthority _authority) {
+        authority = _authority;
+        emit AuthorityUpdated(_authority);
+    }
+
+    /* ========== MODIFIERS ========== */
+
+    modifier onlyGovernor() {
+        require(msg.sender == authority.governor(), UNAUTHORIZED);
+        _;
+    }
+
+    modifier onlyGuardian() {
+        require(msg.sender == authority.guardian(), UNAUTHORIZED);
+        _;
+    }
+
+    modifier onlyPolicy() {
+        require(msg.sender == authority.policy(), UNAUTHORIZED);
+        _;
+    }
+
+    modifier onlyVault() {
+        require(msg.sender == authority.vault(), UNAUTHORIZED);
+        _;
+    }
+
+    /* ========== GOV ONLY ========== */
+
+    function setAuthority(IOlympusAuthority _newAuthority) external onlyGovernor {
+        authority = _newAuthority;
+        emit AuthorityUpdated(_newAuthority);
+    }
+}
+
+// File: contracts/types/FrontEndRewarder.sol
+
+
 pragma solidity ^0.8.10;
 
-import "./types/NoteKeeper.sol";
 
-import "./libraries/SafeERC20.sol";
 
-import "./interfaces/IERC20Metadata.sol";
-import "./interfaces/IBondDepository.sol";
+abstract contract FrontEndRewarder is OlympusAccessControlled {
+    /* ========= STATE VARIABLES ========== */
+
+    uint256 public daoReward; // % reward for dao (3 decimals: 100 = 1%)
+    uint256 public refReward; // % reward for referrer (3 decimals: 100 = 1%)
+    mapping(address => uint256) public rewards; // front end operator rewards
+    mapping(address => bool) public whitelisted; // whitelisted status for operators
+
+    IERC20 internal immutable ohm; // reward token
+
+    constructor(IOlympusAuthority _authority, IERC20 _ohm) OlympusAccessControlled(_authority) {
+        ohm = _ohm;
+    }
+
+    /* ========= EXTERNAL FUNCTIONS ========== */
+
+    // pay reward to front end operator
+    function getReward() external {
+        uint256 reward = rewards[msg.sender];
+
+        rewards[msg.sender] = 0;
+        ohm.transfer(msg.sender, reward);
+    }
+
+    /* ========= INTERNAL ========== */
+
+    /**
+     * @notice add new market payout to user data
+     */
+    function _giveRewards(uint256 _payout, address _referral) internal returns (uint256) {
+        // first we calculate rewards paid to the DAO and to the front end operator (referrer)
+        uint256 toDAO = (_payout * daoReward) / 1e4;
+        uint256 toRef = (_payout * refReward) / 1e4;
+
+        // and store them in our rewards mapping
+        if (whitelisted[_referral]) {
+            rewards[_referral] += toRef;
+            rewards[authority.guardian()] += toDAO;
+        } else {
+            // the DAO receives both rewards if referrer is not whitelisted
+            rewards[authority.guardian()] += toDAO + toRef;
+        }
+        return toDAO + toRef;
+    }
+
+    /**
+     * @notice set rewards for front end operators and DAO
+     */
+    function setRewards(uint256 _toFrontEnd, uint256 _toDAO) external onlyGovernor {
+        refReward = _toFrontEnd;
+        daoReward = _toDAO;
+    }
+
+    /**
+     * @notice add or remove addresses from the reward whitelist
+     */
+    function whitelist(address _operator) external onlyPolicy {
+        whitelisted[_operator] = !whitelisted[_operator];
+    }
+}
+
+// File: contracts/types/NoteKeeper.sol
+
+
+pragma solidity ^0.8.10;
+
+
+
+
+
+
+abstract contract NoteKeeper is INoteKeeper, FrontEndRewarder {
+    mapping(address => Note[]) public notes; // user deposit data
+    mapping(address => mapping(uint256 => address)) private noteTransfers; // change note ownership
+
+    IgOHM internal immutable gOHM;
+    IStaking internal immutable staking;
+    ITreasury internal treasury;
+
+    constructor(
+        IOlympusAuthority _authority,
+        IERC20 _ohm,
+        IgOHM _gohm,
+        IStaking _staking,
+        ITreasury _treasury
+    ) FrontEndRewarder(_authority, _ohm) {
+        gOHM = _gohm;
+        staking = _staking;
+        treasury = _treasury;
+    }
+
+    // if treasury address changes on authority, update it
+    function updateTreasury() external {
+        require(
+            msg.sender == authority.governor() ||
+                msg.sender == authority.guardian() ||
+                msg.sender == authority.policy(),
+            "Only authorized"
+        );
+        treasury = ITreasury(authority.vault());
+    }
+
+    /* ========== ADD ========== */
+
+    /**
+     * @notice             adds a new Note for a user, stores the front end & DAO rewards, and mints & stakes payout & rewards
+     * @param _user        the user that owns the Note
+     * @param _payout      the amount of OHM due to the user
+     * @param _expiry      the timestamp when the Note is redeemable
+     * @param _marketID    the ID of the market deposited into
+     * @return index_      the index of the Note in the user's array
+     */
+    function addNote(
+        address _user,
+        uint256 _payout,
+        uint48 _expiry,
+        uint48 _marketID,
+        address _referral
+    ) internal returns (uint256 index_) {
+        // the index of the note is the next in the user's array
+        index_ = notes[_user].length;
+
+        // the new note is pushed to the user's array
+        notes[_user].push(
+            Note({
+                payout: gOHM.balanceTo(_payout),
+                created: uint48(block.timestamp),
+                matured: _expiry,
+                redeemed: 0,
+                marketID: _marketID
+            })
+        );
+
+        // front end operators can earn rewards by referring users
+        uint256 rewards = _giveRewards(_payout, _referral);
+
+        // mint and stake payout
+        treasury.mint(address(this), _payout + rewards);
+
+        // note that only the payout gets staked (front end rewards are in OHM)
+        staking.stake(address(this), _payout, false, true);
+    }
+
+    /* ========== REDEEM ========== */
+
+    /**
+     * @notice             redeem notes for user
+     * @param _user        the user to redeem for
+     * @param _indexes     the note indexes to redeem
+     * @param _sendgOHM    send payout as gOHM or sOHM
+     * @return payout_     sum of payout sent, in gOHM
+     */
+    function redeem(
+        address _user,
+        uint256[] memory _indexes,
+        bool _sendgOHM
+    ) public override returns (uint256 payout_) {
+        uint48 time = uint48(block.timestamp);
+
+        for (uint256 i = 0; i < _indexes.length; i++) {
+            (uint256 pay, bool matured) = pendingFor(_user, _indexes[i]);
+
+            if (matured) {
+                notes[_user][_indexes[i]].redeemed = time; // mark as redeemed
+                payout_ += pay;
+            }
+        }
+
+        if (_sendgOHM) {
+            gOHM.transfer(_user, payout_); // send payout as gOHM
+        } else {
+            staking.unwrap(_user, payout_); // unwrap and send payout as sOHM
+        }
+    }
+
+    /**
+     * @notice             redeem all redeemable markets for user
+     * @dev                if possible, query indexesFor() off-chain and input in redeem() to save gas
+     * @param _user        user to redeem all notes for
+     * @param _sendgOHM    send payout as gOHM or sOHM
+     * @return             sum of payout sent, in gOHM
+     */
+    function redeemAll(address _user, bool _sendgOHM) external override returns (uint256) {
+        return redeem(_user, indexesFor(_user), _sendgOHM);
+    }
+
+    /* ========== TRANSFER ========== */
+
+    /**
+     * @notice             approve an address to transfer a note
+     * @param _to          address to approve note transfer for
+     * @param _index       index of note to approve transfer for
+     */
+    function pushNote(address _to, uint256 _index) external override {
+        require(notes[msg.sender][_index].created != 0, "Depository: note not found");
+        noteTransfers[msg.sender][_index] = _to;
+    }
+
+    /**
+     * @notice             transfer a note that has been approved by an address
+     * @param _from        the address that approved the note transfer
+     * @param _index       the index of the note to transfer (in the sender's array)
+     */
+    function pullNote(address _from, uint256 _index) external override returns (uint256 newIndex_) {
+        require(noteTransfers[_from][_index] == msg.sender, "Depository: transfer not found");
+        require(notes[_from][_index].redeemed == 0, "Depository: note redeemed");
+
+        newIndex_ = notes[msg.sender].length;
+        notes[msg.sender].push(notes[_from][_index]);
+
+        delete notes[_from][_index];
+    }
+
+    /* ========== VIEW ========== */
+
+    // Note info
+
+    /**
+     * @notice             all pending notes for user
+     * @param _user        the user to query notes for
+     * @return             the pending notes for the user
+     */
+    function indexesFor(address _user) public view override returns (uint256[] memory) {
+        Note[] memory info = notes[_user];
+
+        uint256 length;
+        for (uint256 i = 0; i < info.length; i++) {
+            if (info[i].redeemed == 0 && info[i].payout != 0) length++;
+        }
+
+        uint256[] memory indexes = new uint256[](length);
+        uint256 position;
+
+        for (uint256 i = 0; i < info.length; i++) {
+            if (info[i].redeemed == 0 && info[i].payout != 0) {
+                indexes[position] = i;
+                position++;
+            }
+        }
+
+        return indexes;
+    }
+
+    /**
+     * @notice             calculate amount available for claim for a single note
+     * @param _user        the user that the note belongs to
+     * @param _index       the index of the note in the user's array
+     * @return payout_     the payout due, in gOHM
+     * @return matured_    if the payout can be redeemed
+     */
+    function pendingFor(address _user, uint256 _index) public view override returns (uint256 payout_, bool matured_) {
+        Note memory note = notes[_user][_index];
+
+        payout_ = note.payout;
+        matured_ = note.redeemed == 0 && note.matured <= block.timestamp && note.payout != 0;
+    }
+}
+
+// File: contracts/BondDepository.sol
+
+
+pragma solidity ^0.8.10;
+
+
+
+
 
 /// @title Olympus Bond Depository V2
 /// @author Zeus, Indigo
