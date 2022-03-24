@@ -19,7 +19,7 @@ Coming Soon...
 
 To get test Matic, go to this faucet: https://faucet.polygon.technology/
 
-Network: `Rinkeby` (4)
+Network: `Mumbai Polygon Testnet` (8001)
 - XCHAIN: `0xd3d2d5F7582b53F0929D06fB6f12473811ba2aB5`
 - sXCHAIN: `0xBB3A0712AA17cE116358d71F6C07EB4505D7910a` 
 - USDC: `0x9a7E7639322643d02F8CB478baB0EB1019F82389` 
