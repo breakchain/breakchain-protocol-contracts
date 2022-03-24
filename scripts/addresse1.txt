@@ -1,0 +1,29 @@
+deploying "OlympusERC20Token" (tx: 0x0fdab416d0afe6db8279ecfdb60afd90b668d8b8f25439e36f52060d4588f58a)...: deployed at 0x58D81C972445556E4d9013f6aBF7bfE7EBE8a080 with 2126982 gas
+
+deploying "FRAX" (tx: 0xa29456019b871cdc7da0b6588d1fd1b5239b0efdd67c4ca0651c5f66df049576)...: deployed at 0x7E16b522645Be2A835fA67cDF6210F57476C4ecC with 1988561 gas
+80001
+about to deploy
+
+deploying "WrappedToken" (tx: 0x37ebb01ad6029d22c6e5c1cb66b761984f4ed6b7e504770bc901223e9a699127)...: deployed at 0x1055Cee0C1ce2912B76Be301751861A8Aff27d94 with 1480621 gas
+
+deploying "OlympusBondingCalculator" (tx: 0xedc18749eff2898c75a806f85e0b3c98573d473cdbccc60380a63f0c7fd63337)...: deployed at 0x670e41D3eC48009a3A03E78BEE58DB94b1ef8062 with 1070654 gas
+
+deploying "OlympusTreasury" (tx: 0x402bc5e97a2509c226ff2ce21b5a6ff0e991ca4864f3e868b7215de9e6d5eec6)...: deployed at 0x62485bE869F65D8522EA20Fc88ff0f41c897Be33 with 5481202 gas
+
+deploying "Distributor" (tx: 0x6300e8a5b361ddb92654dadbb221c08153841d17b929fc3af1a99c1bc88faa86)...: deployed at 0xaf9E890c6a8325413979aAA21563AbbFC4b80Fda with 1397986 gas
+
+deploying "sOlympus" (tx: 0x0060d074d075c784ad89e9e1927b022af89c89b4b35207f359d839fde005cfdf)...: deployed at 0x0F060DB128d69dD5f67c4B929E9A8568BC9759C5 with 2766792 gas
+
+deploying "OlympusStaking" (tx: 0x8ab3c8289d4f00353a86e5274d4156366a380415a891ce61d10789d9ca5fa8d0)...: deployed at 0x5feA238f53BCeaa3a2Be7946c12C3c8680494f24 with 2346648 gas
+
+deploying "StakingWarmup" (tx: 0x5818d7cc0911967ad9dfb01b533842ef5fc734597807d9da0e64dfe0a01fde8f)...: deployed at 0x808a49813ef7f9CCe1A308c3c9B43A536fE43304 with 203822 gas'
+
+deploying "StakingHelper" (tx: 0xd0359404b1db8f56aea63913fe469c0820f56e3cf1945d4ed0be0f0331a288ea)...: deployed at 0xCD3D16D089F1f04428BDb510008c7855eE989eac with 313447 gas
+
+deploying "FraxBondDepository" (tx: 0xad86b310df8349f8db2fd259df32b2b619b26518bb764612f34dfd3d502c09b9)...: deployed at 0x4671cCBEf86791c3A4Ab1c372E5fBFea02B32DD7 with 3730909 gas
+
+deploying "WrappedTokenBondDepository" (tx: 0xcece4c8a98d78552be6fcf3b60e084e9a61c1c77689a6ed6ef143b4ee7b35887)...: deployed at 0x9F200B8F27a3EC9D6c44d052fe2337304209FAE9 with 3455707 gas
+
+deploying "wOHM" (tx: 0x849cd49004158adeb8c1bbe0a9aaaa3ac76319ad8c1806522ed9df0ae633effa)...: deployed at 0x7eF7ab5b24ba33C36C997D96c06887f7F1717472 with 2049781 gas
+
+deploying "RedeemHelper" (tx: 0x1bc2accd2f593133a34f615c611e268c6060239b5f059d237a39fc3627754059)...: deployed at 0x2A8E1218f02C49521579728315962Eb26cc1bd31 with 801122 gas

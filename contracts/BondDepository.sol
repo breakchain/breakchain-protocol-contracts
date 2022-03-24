@@ -1,569 +1,1115 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.10;
+pragma solidity 0.7.5;
 
-import "./types/NoteKeeper.sol";
+interface IOwnable {
+  function policy() external view returns (address);
 
-import "./libraries/SafeERC20.sol";
+  function renounceManagement() external;
+  
+  function pushManagement( address newOwner_ ) external;
+  
+  function pullManagement() external;
+}
 
-import "./interfaces/IERC20Metadata.sol";
-import "./interfaces/IBondDepository.sol";
+contract Ownable is IOwnable {
 
-/// @title Olympus Bond Depository V2
-/// @author Zeus, Indigo
-/// Review by: JeffX
+    address internal _owner;
+    address internal _newOwner;
 
-contract XHCAINBondDepositoryV2 is IBondDepository, NoteKeeper {
-    /* ======== DEPENDENCIES ======== */
+    event OwnershipPushed(address indexed previousOwner, address indexed newOwner);
+    event OwnershipPulled(address indexed previousOwner, address indexed newOwner);
 
+    constructor () {
+        _owner = msg.sender;
+        emit OwnershipPushed( address(0), _owner );
+    }
+
+    function policy() public view override returns (address) {
+        return _owner;
+    }
+
+    modifier onlyPolicy() {
+        require( _owner == msg.sender, "Ownable: caller is not the owner" );
+        _;
+    }
+
+    function renounceManagement() public virtual override onlyPolicy() {
+        emit OwnershipPushed( _owner, address(0) );
+        _owner = address(0);
+    }
+
+    function pushManagement( address newOwner_ ) public virtual override onlyPolicy() {
+        require( newOwner_ != address(0), "Ownable: new owner is the zero address");
+        emit OwnershipPushed( _owner, newOwner_ );
+        _newOwner = newOwner_;
+    }
+    
+    function pullManagement() public virtual override {
+        require( msg.sender == _newOwner, "Ownable: must be new owner to pull");
+        emit OwnershipPulled( _owner, _newOwner );
+        _owner = _newOwner;
+    }
+}
+
+library SafeMath {
+
+    function add(uint256 a, uint256 b) internal pure returns (uint256) {
+        uint256 c = a + b;
+        require(c >= a, "SafeMath: addition overflow");
+
+        return c;
+    }
+
+    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
+        return sub(a, b, "SafeMath: subtraction overflow");
+    }
+
+    function sub(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
+        require(b <= a, errorMessage);
+        uint256 c = a - b;
+
+        return c;
+    }
+
+    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
+        if (a == 0) {
+            return 0;
+        }
+
+        uint256 c = a * b;
+        require(c / a == b, "SafeMath: multiplication overflow");
+
+        return c;
+    }
+
+    function div(uint256 a, uint256 b) internal pure returns (uint256) {
+        return div(a, b, "SafeMath: division by zero");
+    }
+
+    function div(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
+        require(b > 0, errorMessage);
+        uint256 c = a / b;
+        return c;
+    }
+
+    function mod(uint256 a, uint256 b) internal pure returns (uint256) {
+        return mod(a, b, "SafeMath: modulo by zero");
+    }
+
+    function mod(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
+        require(b != 0, errorMessage);
+        return a % b;
+    }
+
+    function sqrrt(uint256 a) internal pure returns (uint c) {
+        if (a > 3) {
+            c = a;
+            uint b = add( div( a, 2), 1 );
+            while (b < c) {
+                c = b;
+                b = div( add( div( a, b ), b), 2 );
+            }
+        } else if (a != 0) {
+            c = 1;
+        }
+    }
+}
+
+library Address {
+
+    function isContract(address account) internal view returns (bool) {
+
+        uint256 size;
+        // solhint-disable-next-line no-inline-assembly
+        assembly { size := extcodesize(account) }
+        return size > 0;
+    }
+
+    function sendValue(address payable recipient, uint256 amount) internal {
+        require(address(this).balance >= amount, "Address: insufficient balance");
+
+        // solhint-disable-next-line avoid-low-level-calls, avoid-call-value
+        (bool success, ) = recipient.call{ value: amount }("");
+        require(success, "Address: unable to send value, recipient may have reverted");
+    }
+
+    function functionCall(address target, bytes memory data) internal returns (bytes memory) {
+      return functionCall(target, data, "Address: low-level call failed");
+    }
+
+    function functionCall(address target, bytes memory data, string memory errorMessage) internal returns (bytes memory) {
+        return _functionCallWithValue(target, data, 0, errorMessage);
+    }
+
+    function functionCallWithValue(address target, bytes memory data, uint256 value) internal returns (bytes memory) {
+        return functionCallWithValue(target, data, value, "Address: low-level call with value failed");
+    }
+
+    function functionCallWithValue(address target, bytes memory data, uint256 value, string memory errorMessage) internal returns (bytes memory) {
+        require(address(this).balance >= value, "Address: insufficient balance for call");
+        require(isContract(target), "Address: call to non-contract");
+
+        // solhint-disable-next-line avoid-low-level-calls
+        (bool success, bytes memory returndata) = target.call{ value: value }(data);
+        return _verifyCallResult(success, returndata, errorMessage);
+    }
+
+    function _functionCallWithValue(address target, bytes memory data, uint256 weiValue, string memory errorMessage) private returns (bytes memory) {
+        require(isContract(target), "Address: call to non-contract");
+
+        // solhint-disable-next-line avoid-low-level-calls
+        (bool success, bytes memory returndata) = target.call{ value: weiValue }(data);
+        if (success) {
+            return returndata;
+        } else {
+            // Look for revert reason and bubble it up if present
+            if (returndata.length > 0) {
+                // The easiest way to bubble the revert reason is using memory via assembly
+
+                // solhint-disable-next-line no-inline-assembly
+                assembly {
+                    let returndata_size := mload(returndata)
+                    revert(add(32, returndata), returndata_size)
+                }
+            } else {
+                revert(errorMessage);
+            }
+        }
+    }
+
+    function functionStaticCall(address target, bytes memory data) internal view returns (bytes memory) {
+        return functionStaticCall(target, data, "Address: low-level static call failed");
+    }
+
+    function functionStaticCall(address target, bytes memory data, string memory errorMessage) internal view returns (bytes memory) {
+        require(isContract(target), "Address: static call to non-contract");
+
+        // solhint-disable-next-line avoid-low-level-calls
+        (bool success, bytes memory returndata) = target.staticcall(data);
+        return _verifyCallResult(success, returndata, errorMessage);
+    }
+
+    function functionDelegateCall(address target, bytes memory data) internal returns (bytes memory) {
+        return functionDelegateCall(target, data, "Address: low-level delegate call failed");
+    }
+
+    function functionDelegateCall(address target, bytes memory data, string memory errorMessage) internal returns (bytes memory) {
+        require(isContract(target), "Address: delegate call to non-contract");
+
+        // solhint-disable-next-line avoid-low-level-calls
+        (bool success, bytes memory returndata) = target.delegatecall(data);
+        return _verifyCallResult(success, returndata, errorMessage);
+    }
+
+    function _verifyCallResult(bool success, bytes memory returndata, string memory errorMessage) private pure returns(bytes memory) {
+        if (success) {
+            return returndata;
+        } else {
+            if (returndata.length > 0) {
+
+                assembly {
+                    let returndata_size := mload(returndata)
+                    revert(add(32, returndata), returndata_size)
+                }
+            } else {
+                revert(errorMessage);
+            }
+        }
+    }
+
+    function addressToString(address _address) internal pure returns(string memory) {
+        bytes32 _bytes = bytes32(uint256(_address));
+        bytes memory HEX = "0123456789abcdef";
+        bytes memory _addr = new bytes(42);
+
+        _addr[0] = '0';
+        _addr[1] = 'x';
+
+        for(uint256 i = 0; i < 20; i++) {
+            _addr[2+i*2] = HEX[uint8(_bytes[i + 12] >> 4)];
+            _addr[3+i*2] = HEX[uint8(_bytes[i + 12] & 0x0f)];
+        }
+
+        return string(_addr);
+
+    }
+}
+
+interface IERC20 {
+    function decimals() external view returns (uint8);
+
+    function totalSupply() external view returns (uint256);
+
+    function balanceOf(address account) external view returns (uint256);
+
+    function transfer(address recipient, uint256 amount) external returns (bool);
+
+    function allowance(address owner, address spender) external view returns (uint256);
+
+    function approve(address spender, uint256 amount) external returns (bool);
+
+    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
+
+    event Transfer(address indexed from, address indexed to, uint256 value);
+
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+}
+
+abstract contract ERC20 is IERC20 {
+
+    using SafeMath for uint256;
+
+    // TODO comment actual hash value.
+    bytes32 constant private ERC20TOKEN_ERC1820_INTERFACE_ID = keccak256( "ERC20Token" );
+    
+    mapping (address => uint256) internal _balances;
+
+    mapping (address => mapping (address => uint256)) internal _allowances;
+
+    uint256 internal _totalSupply;
+
+    string internal _name;
+    
+    string internal _symbol;
+    
+    uint8 internal _decimals;
+
+    constructor (string memory name_, string memory symbol_, uint8 decimals_) {
+        _name = name_;
+        _symbol = symbol_;
+        _decimals = decimals_;
+    }
+
+    function name() public view returns (string memory) {
+        return _name;
+    }
+
+    function symbol() public view returns (string memory) {
+        return _symbol;
+    }
+
+    function decimals() public view override returns (uint8) {
+        return _decimals;
+    }
+
+    function totalSupply() public view override returns (uint256) {
+        return _totalSupply;
+    }
+
+    function balanceOf(address account) public view virtual override returns (uint256) {
+        return _balances[account];
+    }
+
+    function transfer(address recipient, uint256 amount) public virtual override returns (bool) {
+        _transfer(msg.sender, recipient, amount);
+        return true;
+    }
+
+    function allowance(address owner, address spender) public view virtual override returns (uint256) {
+        return _allowances[owner][spender];
+    }
+
+    function approve(address spender, uint256 amount) public virtual override returns (bool) {
+        _approve(msg.sender, spender, amount);
+        return true;
+    }
+
+    function transferFrom(address sender, address recipient, uint256 amount) public virtual override returns (bool) {
+        _transfer(sender, recipient, amount);
+        _approve(sender, msg.sender, _allowances[sender][msg.sender].sub(amount, "ERC20: transfer amount exceeds allowance"));
+        return true;
+    }
+
+    function increaseAllowance(address spender, uint256 addedValue) public virtual returns (bool) {
+        _approve(msg.sender, spender, _allowances[msg.sender][spender].add(addedValue));
+        return true;
+    }
+
+    function decreaseAllowance(address spender, uint256 subtractedValue) public virtual returns (bool) {
+        _approve(msg.sender, spender, _allowances[msg.sender][spender].sub(subtractedValue, "ERC20: decreased allowance below zero"));
+        return true;
+    }
+
+    function _transfer(address sender, address recipient, uint256 amount) internal virtual {
+        require(sender != address(0), "ERC20: transfer from the zero address");
+        require(recipient != address(0), "ERC20: transfer to the zero address");
+
+        _beforeTokenTransfer(sender, recipient, amount);
+
+        _balances[sender] = _balances[sender].sub(amount, "ERC20: transfer amount exceeds balance");
+        _balances[recipient] = _balances[recipient].add(amount);
+        emit Transfer(sender, recipient, amount);
+    }
+
+    function _mint(address account_, uint256 ammount_) internal virtual {
+        require(account_ != address(0), "ERC20: mint to the zero address");
+        _beforeTokenTransfer(address( this ), account_, ammount_);
+        _totalSupply = _totalSupply.add(ammount_);
+        _balances[account_] = _balances[account_].add(ammount_);
+        emit Transfer(address( this ), account_, ammount_);
+    }
+
+    function _burn(address account, uint256 amount) internal virtual {
+        require(account != address(0), "ERC20: burn from the zero address");
+
+        _beforeTokenTransfer(account, address(0), amount);
+
+        _balances[account] = _balances[account].sub(amount, "ERC20: burn amount exceeds balance");
+        _totalSupply = _totalSupply.sub(amount);
+        emit Transfer(account, address(0), amount);
+    }
+
+    function _approve(address owner, address spender, uint256 amount) internal virtual {
+        require(owner != address(0), "ERC20: approve from the zero address");
+        require(spender != address(0), "ERC20: approve to the zero address");
+
+        _allowances[owner][spender] = amount;
+        emit Approval(owner, spender, amount);
+    }
+
+  function _beforeTokenTransfer( address from_, address to_, uint256 amount_ ) internal virtual { }
+}
+
+interface IERC2612Permit {
+
+    function permit(
+        address owner,
+        address spender,
+        uint256 amount,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external;
+
+    function nonces(address owner) external view returns (uint256);
+}
+
+library Counters {
+    using SafeMath for uint256;
+
+    struct Counter {
+
+        uint256 _value; // default: 0
+    }
+
+    function current(Counter storage counter) internal view returns (uint256) {
+        return counter._value;
+    }
+
+    function increment(Counter storage counter) internal {
+        counter._value += 1;
+    }
+
+    function decrement(Counter storage counter) internal {
+        counter._value = counter._value.sub(1);
+    }
+}
+
+abstract contract ERC20Permit is ERC20, IERC2612Permit {
+    using Counters for Counters.Counter;
+
+    mapping(address => Counters.Counter) private _nonces;
+
+    // keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
+    bytes32 public constant PERMIT_TYPEHASH = 0x6e71edae12b1b97f4d1f60370fef10105fa2faae0126114a169c64845d6126c9;
+
+    bytes32 public DOMAIN_SEPARATOR;
+
+    constructor() {
+        uint256 chainID;
+        assembly {
+            chainID := chainid()
+        }
+
+        DOMAIN_SEPARATOR = keccak256(
+            abi.encode(
+                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+                keccak256(bytes(name())),
+                keccak256(bytes("1")), // Version
+                chainID,
+                address(this)
+            )
+        );
+    }
+
+    function permit(
+        address owner,
+        address spender,
+        uint256 amount,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) public virtual override {
+        require(block.timestamp <= deadline, "Permit: expired deadline");
+
+        bytes32 hashStruct =
+            keccak256(abi.encode(PERMIT_TYPEHASH, owner, spender, amount, _nonces[owner].current(), deadline));
+
+        bytes32 _hash = keccak256(abi.encodePacked(uint16(0x1901), DOMAIN_SEPARATOR, hashStruct));
+
+        address signer = ecrecover(_hash, v, r, s);
+        require(signer != address(0) && signer == owner, "ZeroSwapPermit: Invalid signature");
+
+        _nonces[owner].increment();
+        _approve(owner, spender, amount);
+    }
+
+    function nonces(address owner) public view override returns (uint256) {
+        return _nonces[owner].current();
+    }
+}
+
+library SafeERC20 {
+    using SafeMath for uint256;
+    using Address for address;
+
+    function safeTransfer(IERC20 token, address to, uint256 value) internal {
+        _callOptionalReturn(token, abi.encodeWithSelector(token.transfer.selector, to, value));
+    }
+
+    function safeTransferFrom(IERC20 token, address from, address to, uint256 value) internal {
+        _callOptionalReturn(token, abi.encodeWithSelector(token.transferFrom.selector, from, to, value));
+    }
+
+    function safeApprove(IERC20 token, address spender, uint256 value) internal {
+
+        require((value == 0) || (token.allowance(address(this), spender) == 0),
+            "SafeERC20: approve from non-zero to non-zero allowance"
+        );
+        _callOptionalReturn(token, abi.encodeWithSelector(token.approve.selector, spender, value));
+    }
+
+    function safeIncreaseAllowance(IERC20 token, address spender, uint256 value) internal {
+        uint256 newAllowance = token.allowance(address(this), spender).add(value);
+        _callOptionalReturn(token, abi.encodeWithSelector(token.approve.selector, spender, newAllowance));
+    }
+
+    function safeDecreaseAllowance(IERC20 token, address spender, uint256 value) internal {
+        uint256 newAllowance = token.allowance(address(this), spender).sub(value, "SafeERC20: decreased allowance below zero");
+        _callOptionalReturn(token, abi.encodeWithSelector(token.approve.selector, spender, newAllowance));
+    }
+
+    function _callOptionalReturn(IERC20 token, bytes memory data) private {
+
+        bytes memory returndata = address(token).functionCall(data, "SafeERC20: low-level call failed");
+        if (returndata.length > 0) { // Return data is optional
+            // solhint-disable-next-line max-line-length
+            require(abi.decode(returndata, (bool)), "SafeERC20: ERC20 operation did not succeed");
+        }
+    }
+}
+
+library FullMath {
+    function fullMul(uint256 x, uint256 y) private pure returns (uint256 l, uint256 h) {
+        uint256 mm = mulmod(x, y, uint256(-1));
+        l = x * y;
+        h = mm - l;
+        if (mm < l) h -= 1;
+    }
+
+    function fullDiv(
+        uint256 l,
+        uint256 h,
+        uint256 d
+    ) private pure returns (uint256) {
+        uint256 pow2 = d & -d;
+        d /= pow2;
+        l /= pow2;
+        l += h * ((-pow2) / pow2 + 1);
+        uint256 r = 1;
+        r *= 2 - d * r;
+        r *= 2 - d * r;
+        r *= 2 - d * r;
+        r *= 2 - d * r;
+        r *= 2 - d * r;
+        r *= 2 - d * r;
+        r *= 2 - d * r;
+        r *= 2 - d * r;
+        return l * r;
+    }
+
+    function mulDiv(
+        uint256 x,
+        uint256 y,
+        uint256 d
+    ) internal pure returns (uint256) {
+        (uint256 l, uint256 h) = fullMul(x, y);
+        uint256 mm = mulmod(x, y, d);
+        if (mm > l) h -= 1;
+        l -= mm;
+        require(h < d, 'FullMath::mulDiv: overflow');
+        return fullDiv(l, h, d);
+    }
+}
+
+library FixedPoint {
+
+    struct uq112x112 {
+        uint224 _x;
+    }
+
+    struct uq144x112 {
+        uint256 _x;
+    }
+
+    uint8 private constant RESOLUTION = 112;
+    uint256 private constant Q112 = 0x10000000000000000000000000000;
+    uint256 private constant Q224 = 0x100000000000000000000000000000000000000000000000000000000;
+    uint256 private constant LOWER_MASK = 0xffffffffffffffffffffffffffff; // decimal of UQ*x112 (lower 112 bits)
+
+    function decode(uq112x112 memory self) internal pure returns (uint112) {
+        return uint112(self._x >> RESOLUTION);
+    }
+
+    function decode112with18(uq112x112 memory self) internal pure returns (uint) {
+
+        return uint(self._x) / 5192296858534827;
+    }
+
+    function fraction(uint256 numerator, uint256 denominator) internal pure returns (uq112x112 memory) {
+        require(denominator > 0, 'FixedPoint::fraction: division by zero');
+        if (numerator == 0) return FixedPoint.uq112x112(0);
+
+        if (numerator <= uint144(-1)) {
+            uint256 result = (numerator << RESOLUTION) / denominator;
+            require(result <= uint224(-1), 'FixedPoint::fraction: overflow');
+            return uq112x112(uint224(result));
+        } else {
+            uint256 result = FullMath.mulDiv(numerator, Q112, denominator);
+            require(result <= uint224(-1), 'FixedPoint::fraction: overflow');
+            return uq112x112(uint224(result));
+        }
+    }
+}
+
+interface ITreasury {
+    function deposit( uint _amount, address _token, uint _profit ) external returns ( bool );
+    function valueOf( address _token, uint _amount ) external view returns ( uint value_ );
+}
+
+interface IBondCalculator {
+    function valuation( address _LP, uint _amount ) external view returns ( uint );
+    function markdown( address _LP ) external view returns ( uint );
+}
+
+interface IStaking {
+    function stake( uint _amount, address _recipient ) external returns ( bool );
+}
+
+interface IStakingHelper {
+    function stake( uint _amount, address _recipient ) external;
+}
+
+contract OlympusBondDepository is Ownable {
+
+    using FixedPoint for *;
     using SafeERC20 for IERC20;
+    using SafeMath for uint;
+
+
+
 
     /* ======== EVENTS ======== */
 
-    event CreateMarket(uint256 indexed id, address indexed baseToken, address indexed quoteToken, uint256 initialPrice);
-    event CloseMarket(uint256 indexed id);
-    event Bond(uint256 indexed id, uint256 amount, uint256 price);
-    event Tuned(uint256 indexed id, uint64 oldControlVariable, uint64 newControlVariable);
+    event BondCreated( uint deposit, uint indexed payout, uint indexed expires, uint indexed priceInUSD );
+    event BondRedeemed( address indexed recipient, uint payout, uint remaining );
+    event BondPriceChanged( uint indexed priceInUSD, uint indexed internalPrice, uint indexed debtRatio );
+    event ControlVariableAdjustment( uint initialBCV, uint newBCV, uint adjustment, bool addition );
+
+
+
 
     /* ======== STATE VARIABLES ======== */
 
-    // Storage
-    Market[] public markets; // persistent market data
-    Terms[] public terms; // deposit construction data
-    Metadata[] public metadata; // extraneous market data
-    mapping(uint256 => Adjustment) public adjustments; // control variable changes
+    address public immutable OHM; // token given as payment for bond
+    address public immutable principle; // token used to create bond
+    address public immutable treasury; // mints OHM when receives principle
+    address public immutable DAO; // receives profit share from bond
 
-    // Queries
-    mapping(address => uint256[]) public marketsForQuote; // market IDs for quote token
+    bool public immutable isLiquidityBond; // LP and Reserve bonds are treated slightly different
+    address public immutable bondCalculator; // calculates value of LP tokens
 
-    /* ======== CONSTRUCTOR ======== */
+    address public staking; // to auto-stake payout
+    address public stakingHelper; // to stake and claim if no staking warmup
+    bool public useHelper;
 
-    constructor(
-        IOlympusAuthority _authority,
-        IERC20 _ohm,
-        IgOHM _gohm,
-        IStaking _staking,
-        ITreasury _treasury
-    ) NoteKeeper(_authority, _ohm, _gohm, _staking, _treasury) {
-        // save gas for users by bulk approving stake() transactions
-        _ohm.approve(address(_staking), 1e45);
+    Terms public terms; // stores terms for new bonds
+    Adjust public adjustment; // stores adjustment to BCV data
+
+    mapping( address => Bond ) public bondInfo; // stores bond information for depositors
+
+    uint public totalDebt; // total value of outstanding bonds; used for pricing
+    uint public lastDecay; // reference block timestamp for debt decay
+
+
+
+
+    /* ======== STRUCTS ======== */
+
+    // Info for creating new bonds
+    struct Terms {
+        uint controlVariable; // scaling variable for price
+        uint vestingTerm; // in seconds
+        uint minimumPrice; // vs principle value
+        uint maxPayout; // in thousandths of a %. i.e. 500 = 0.5%
+        uint fee; // as % of bond payout, in hundreths. ( 500 = 5% = 0.05 for every 1 paid)
+        uint maxDebt; // 9 decimal debt ratio, max % total supply created as debt
     }
 
-    /* ======== DEPOSIT ======== */
+    // Info for bond holder
+    struct Bond {
+        uint payout; // OHM remaining to be paid
+        uint vesting; // Blocks left to vest
+        uint lastTime; // Last interaction
+        uint pricePaid; // In DAI, for front end viewing
+    }
+
+    // Info for incremental adjustments to control variable
+    struct Adjust {
+        bool add; // addition or subtraction
+        uint rate; // increment
+        uint target; // BCV when adjustment finished
+        uint buffer; // minimum length (in seconds) between adjustments
+        uint lastTime; // time when last adjustment made
+    }
+
+
+
+
+    /* ======== INITIALIZATION ======== */
+
+    constructor ( 
+        address _OHM,
+        address _principle,
+        address _treasury, 
+        address _DAO, 
+        address _bondCalculator
+    ) {
+        require( _OHM != address(0) );
+        OHM = _OHM;
+        require( _principle != address(0) );
+        principle = _principle;
+        require( _treasury != address(0) );
+        treasury = _treasury;
+        require( _DAO != address(0) );
+        DAO = _DAO;
+        // bondCalculator should be address(0) if not LP bond
+        bondCalculator = _bondCalculator;
+        isLiquidityBond = ( _bondCalculator != address(0) );
+    }
 
     /**
-     * @notice             deposit quote tokens in exchange for a bond from a specified market
-     * @param _id          the ID of the market
-     * @param _amount      the amount of quote token to spend
-     * @param _maxPrice    the maximum price at which to buy
-     * @param _user        the recipient of the payout
-     * @param _referral    the front end operator address
-     * @return payout_     the amount of gOHM due
-     * @return expiry_     the timestamp at which payout is redeemable
-     * @return index_      the user index of the Note (used to redeem or query information)
+     *  @notice initializes bond parameters
+     *  @param _controlVariable uint
+     *  @param _vestingTerm uint
+     *  @param _minimumPrice uint
+     *  @param _maxPayout uint
+     *  @param _fee uint
+     *  @param _maxDebt uint
+     *  @param _initialDebt uint
      */
-    function deposit(
-        uint256 _id,
-        uint256 _amount,
-        uint256 _maxPrice,
-        address _user,
-        address _referral
-    )
-        external
-        override
-        returns (
-            uint256 payout_,
-            uint256 expiry_,
-            uint256 index_
-        )
-    {
-        Market storage market = markets[_id];
-        Terms memory term = terms[_id];
-        uint48 currentTime = uint48(block.timestamp);
+    function initializeBondTerms( 
+        uint _controlVariable, 
+        uint _vestingTerm,
+        uint _minimumPrice,
+        uint _maxPayout,
+        uint _fee,
+        uint _maxDebt,
+        uint _initialDebt
+    ) external onlyPolicy() {
+        require( terms.controlVariable == 0, "Bonds must be initialized from 0" );
+        terms = Terms ({
+            controlVariable: _controlVariable,
+            vestingTerm: _vestingTerm,
+            minimumPrice: _minimumPrice,
+            maxPayout: _maxPayout,
+            fee: _fee,
+            maxDebt: _maxDebt
+        });
+        totalDebt = _initialDebt;
+        lastDecay = block.timestamp;
+    }
 
-        // Markets end at a defined timestamp
-        // |-------------------------------------| t
-        require(currentTime < term.conclusion, "Depository: market concluded");
 
-        // Debt and the control variable decay over time
-        _decay(_id, currentTime);
 
-        // Users input a maximum price, which protects them from price changes after
-        // entering the mempool. max price is a slippage mitigation measure
-        uint256 price = _marketPrice(_id);
-        require(price <= _maxPrice, "Depository: more than max price");
 
-        /**
-         * payout for the deposit = amount / price
-         *
-         * where
-         * payout = OHM out
-         * amount = quote tokens in
-         * price = quote tokens : ohm (i.e. 42069 DAI : OHM)
-         *
-         * 1e18 = OHM decimals (9) + price decimals (9)
-         */
-        payout_ = ((_amount * 1e18) / price) / (10**metadata[_id].quoteDecimals);
+    /* ======== POLICY FUNCTIONS ======== */
 
-        // markets have a max payout amount, capping size because deposits
-        // do not experience slippage. max payout is recalculated upon tuning
-        require(payout_ <= market.maxPayout, "Depository: max size exceeded");
+    enum PARAMETER { VESTING, PAYOUT, FEE, DEBT }
+    /**
+     *  @notice set parameters for new bonds
+     *  @param _parameter PARAMETER
+     *  @param _input uint
+     */
+    function setBondTerms ( PARAMETER _parameter, uint _input ) external onlyPolicy() {
+        if ( _parameter == PARAMETER.VESTING ) { // 0
+            require( _input >= 129600, "Vesting must be longer than 36 hours" );
+            terms.vestingTerm = _input;
+        } else if ( _parameter == PARAMETER.PAYOUT ) { // 1
+            require( _input <= 1000, "Payout cannot be above 1 percent" );
+            terms.maxPayout = _input;
+        } else if ( _parameter == PARAMETER.FEE ) { // 2
+            require( _input <= 10000, "DAO fee cannot exceed payout" );
+            terms.fee = _input;
+        } else if ( _parameter == PARAMETER.DEBT ) { // 3
+            terms.maxDebt = _input;
+        }
+    }
 
-        /*
-         * each market is initialized with a capacity
-         *
-         * this is either the number of OHM that the market can sell
-         * (if capacity in quote is false),
-         *
-         * or the number of quote tokens that the market can buy
-         * (if capacity in quote is true)
-         */
-        market.capacity -= market.capacityInQuote ? _amount : payout_;
+    /**
+     *  @notice set control variable adjustment
+     *  @param _addition bool
+     *  @param _increment uint
+     *  @param _target uint
+     *  @param _buffer uint
+     */
+    function setAdjustment ( 
+        bool _addition,
+        uint _increment, 
+        uint _target,
+        uint _buffer 
+    ) external onlyPolicy() {
+        require( _increment <= terms.controlVariable.mul( 25 ).div( 1000 ), "Increment too large" );
 
-        /**
-         * bonds mature with a cliff at a set timestamp
-         * prior to the expiry timestamp, no payout tokens are accessible to the user
-         * after the expiry timestamp, the entire payout can be redeemed
-         *
-         * there are two types of bonds: fixed-term and fixed-expiration
-         *
-         * fixed-term bonds mature in a set amount of time from deposit
-         * i.e. term = 1 week. when alice deposits on day 1, her bond
-         * expires on day 8. when bob deposits on day 2, his bond expires day 9.
-         *
-         * fixed-expiration bonds mature at a set timestamp
-         * i.e. expiration = day 10. when alice deposits on day 1, her term
-         * is 9 days. when bob deposits on day 2, his term is 8 days.
-         */
-        expiry_ = term.fixedTerm ? term.vesting + currentTime : term.vesting;
+        adjustment = Adjust({
+            add: _addition,
+            rate: _increment,
+            target: _target,
+            buffer: _buffer,
+            lastTime: block.timestamp
+        });
+    }
 
-        // markets keep track of how many quote tokens have been
-        // purchased, and how much OHM has been sold
-        market.purchased += _amount;
-        market.sold += uint64(payout_);
-
-        // incrementing total debt raises the price of the next bond
-        market.totalDebt += uint64(payout_);
-
-        emit Bond(_id, _amount, price);
-
-        /**
-         * user data is stored as Notes. these are isolated array entries
-         * storing the amount due, the time created, the time when payout
-         * is redeemable, the time when payout was redeemed, and the ID
-         * of the market deposited into
-         */
-        index_ = addNote(_user, payout_, uint48(expiry_), uint48(_id), _referral);
-
-        // transfer payment to treasury
-        market.quoteToken.safeTransferFrom(msg.sender, address(treasury), _amount);
-
-        // if max debt is breached, the market is closed
-        // this a circuit breaker
-        if (term.maxDebt < market.totalDebt) {
-            market.capacity = 0;
-            emit CloseMarket(_id);
+    /**
+     *  @notice set contract for auto stake
+     *  @param _staking address
+     *  @param _helper bool
+     */
+    function setStaking( address _staking, bool _helper ) external onlyPolicy() {
+        require( _staking != address(0) );
+        if ( _helper ) {
+            useHelper = true;
+            stakingHelper = _staking;
         } else {
-            // if market will continue, the control variable is tuned to hit targets on time
-            _tune(_id, currentTime);
+            useHelper = false;
+            staking = _staking;
         }
     }
 
+
+    
+
+    /* ======== USER FUNCTIONS ======== */
+
     /**
-     * @notice             decay debt, and adjust control variable if there is an active change
-     * @param _id          ID of market
-     * @param _time        uint48 timestamp (saves gas when passed in)
+     *  @notice deposit bond
+     *  @param _amount uint
+     *  @param _maxPrice uint
+     *  @param _depositor address
+     *  @return uint
      */
-    function _decay(uint256 _id, uint48 _time) internal {
-        // Debt decay
+    function deposit( 
+        uint _amount, 
+        uint _maxPrice,
+        address _depositor
+    ) external returns ( uint ) {
+        require( _depositor != address(0), "Invalid address" );
 
-        /*
-         * Debt is a time-decayed sum of tokens spent in a market
-         * Debt is added when deposits occur and removed over time
-         * |
-         * |    debt falls with
-         * |   / \  inactivity       / \
-         * | /     \              /\/    \
-         * |         \           /         \
-         * |           \      /\/            \
-         * |             \  /  and rises       \
-         * |                with deposits
-         * |
-         * |------------------------------------| t
+        decayDebt();
+        require( totalDebt <= terms.maxDebt, "Max capacity reached" );
+        
+        uint priceInUSD = bondPriceInUSD(); // Stored in bond info
+        uint nativePrice = _bondPrice();
+
+        require( _maxPrice >= nativePrice, "Slippage limit: more than max price" ); // slippage protection
+
+        uint value = ITreasury( treasury ).valueOf( principle, _amount );
+        uint payout = payoutFor( value ); // payout to bonder is computed
+
+        require( payout >= 10000000, "Bond too small" ); // must be > 0.01 OHM ( underflow protection )
+        require( payout <= maxPayout(), "Bond too large"); // size protection because there is no slippage
+
+        // profits are calculated
+        uint fee = payout.mul( terms.fee ).div( 10000 );
+        uint profit = value.sub( payout ).sub( fee );
+
+        /**
+            principle is transferred in
+            approved and
+            deposited into the treasury, returning (_amount - profit) OHM
          */
-        markets[_id].totalDebt -= debtDecay(_id);
-        metadata[_id].lastDecay = _time;
+        IERC20( principle ).safeTransferFrom( msg.sender, address(this), _amount );
+        IERC20( principle ).approve( address( treasury ), _amount );
+        ITreasury( treasury ).deposit( _amount, principle, profit );
+        
+        if ( fee != 0 ) { // fee is transferred to dao 
+            IERC20( OHM ).safeTransfer( DAO, fee ); 
+        }
+        
+        // total debt is increased
+        totalDebt = totalDebt.add( value ); 
+                
+        // depositor info is stored
+        bondInfo[ _depositor ] = Bond({ 
+            payout: bondInfo[ _depositor ].payout.add( payout ),
+            vesting: terms.vestingTerm,
+            lastTime: block.timestamp,
+            pricePaid: priceInUSD
+        });
 
-        // Control variable decay
+        // indexed events are emitted
+        emit BondCreated( _amount, payout, block.timestamp.add( terms.vestingTerm ), priceInUSD );
+        emit BondPriceChanged( bondPriceInUSD(), _bondPrice(), debtRatio() );
 
-        // The bond control variable is continually tuned. When it is lowered (which
-        // lowers the market price), the change is carried out smoothly over time.
-        if (adjustments[_id].active) {
-            Adjustment storage adjustment = adjustments[_id];
+        adjust(); // control variable is adjusted
+        return payout; 
+    }
 
-            (uint64 adjustBy, uint48 secondsSince, bool stillActive) = _controlDecay(_id);
-            terms[_id].controlVariable -= adjustBy;
+    /** 
+     *  @notice redeem bond for user
+     *  @param _recipient address
+     *  @param _stake bool
+     *  @return uint
+     */ 
+    function redeem( address _recipient, bool _stake ) external returns ( uint ) {        
+        Bond memory info = bondInfo[ _recipient ];
+        uint percentVested = percentVestedFor( _recipient ); // (blocks since last interaction / vesting term remaining)
 
-            if (stillActive) {
-                adjustment.change -= adjustBy;
-                adjustment.timeToAdjusted -= secondsSince;
-                adjustment.lastAdjustment = _time;
+        if ( percentVested >= 10000 ) { // if fully vested
+            delete bondInfo[ _recipient ]; // delete user info
+            emit BondRedeemed( _recipient, info.payout, 0 ); // emit bond data
+            return stakeOrSend( _recipient, _stake, info.payout ); // pay user everything due
+
+        } else { // if unfinished
+            // calculate payout vested
+            uint payout = info.payout.mul( percentVested ).div( 10000 );
+
+            // store updated deposit info
+            bondInfo[ _recipient ] = Bond({
+                payout: info.payout.sub( payout ),
+                vesting: info.vesting.sub( block.timestamp.sub( info.lastTime ) ),
+                lastTime: block.timestamp,
+                pricePaid: info.pricePaid
+            });
+
+            emit BondRedeemed( _recipient, payout, bondInfo[ _recipient ].payout );
+            return stakeOrSend( _recipient, _stake, payout );
+        }
+    }
+
+
+
+    
+    /* ======== INTERNAL HELPER FUNCTIONS ======== */
+
+    /**
+     *  @notice allow user to stake payout automatically
+     *  @param _stake bool
+     *  @param _amount uint
+     *  @return uint
+     */
+    function stakeOrSend( address _recipient, bool _stake, uint _amount ) internal returns ( uint ) {
+        if ( !_stake ) { // if user does not want to stake
+            IERC20( OHM ).transfer( _recipient, _amount ); // send payout
+        } else { // if user wants to stake
+            if ( useHelper ) { // use if staking warmup is 0
+                IERC20( OHM ).approve( stakingHelper, _amount );
+                IStakingHelper( stakingHelper ).stake( _amount, _recipient );
             } else {
-                adjustment.active = false;
+                IERC20( OHM ).approve( staking, _amount );
+                IStaking( staking ).stake( _amount, _recipient );
             }
         }
+        return _amount;
     }
 
     /**
-     * @notice             auto-adjust control variable to hit capacity/spend target
-     * @param _id          ID of market
-     * @param _time        uint48 timestamp (saves gas when passed in)
+     *  @notice makes incremental adjustment to control variable
      */
-    function _tune(uint256 _id, uint48 _time) internal {
-        Metadata memory meta = metadata[_id];
-
-        if (_time >= meta.lastTune + meta.tuneInterval) {
-            Market memory market = markets[_id];
-
-            // compute seconds remaining until market will conclude
-            uint256 timeRemaining = terms[_id].conclusion - _time;
-            uint256 price = _marketPrice(_id);
-
-            // standardize capacity into an base token amount
-            // ohm decimals (9) + price decimals (9)
-            uint256 capacity = market.capacityInQuote
-                ? ((market.capacity * 1e18) / price) / (10**meta.quoteDecimals)
-                : market.capacity;
-
-            /**
-             * calculate the correct payout to complete on time assuming each bond
-             * will be max size in the desired deposit interval for the remaining time
-             *
-             * i.e. market has 10 days remaining. deposit interval is 1 day. capacity
-             * is 10,000 OHM. max payout would be 1,000 OHM (10,000 * 1 / 10).
-             */
-            markets[_id].maxPayout = uint64((capacity * meta.depositInterval) / timeRemaining);
-
-            // calculate the ideal total debt to satisfy capacity in the remaining time
-            uint256 targetDebt = (capacity * meta.length) / timeRemaining;
-
-            // derive a new control variable from the target debt and current supply
-            uint64 newControlVariable = uint64((price * treasury.baseSupply()) / targetDebt);
-
-            emit Tuned(_id, terms[_id].controlVariable, newControlVariable);
-
-            if (newControlVariable >= terms[_id].controlVariable) {
-                terms[_id].controlVariable = newControlVariable;
+    function adjust() internal {
+        uint timeCanAdjust = adjustment.lastTime.add( adjustment.buffer );
+        if( adjustment.rate != 0 && block.timestamp >= timeCanAdjust ) {
+            uint initial = terms.controlVariable;
+            if ( adjustment.add ) {
+                terms.controlVariable = terms.controlVariable.add( adjustment.rate );
+                if ( terms.controlVariable >= adjustment.target ) {
+                    adjustment.rate = 0;
+                }
             } else {
-                // if decrease, control variable change will be carried out over the tune interval
-                // this is because price will be lowered
-                uint64 change = terms[_id].controlVariable - newControlVariable;
-                adjustments[_id] = Adjustment(change, _time, meta.tuneInterval, true);
+                terms.controlVariable = terms.controlVariable.sub( adjustment.rate );
+                if ( terms.controlVariable <= adjustment.target ) {
+                    adjustment.rate = 0;
+                }
             }
-            metadata[_id].lastTune = _time;
+            adjustment.lastTime = block.timestamp;
+            emit ControlVariableAdjustment( initial, terms.controlVariable, adjustment.rate, adjustment.add );
         }
     }
 
-    /* ======== CREATE ======== */
+    /**
+     *  @notice reduce total debt
+     */
+    function decayDebt() internal {
+        totalDebt = totalDebt.sub( debtDecay() );
+        lastDecay = block.timestamp;
+    }
+
+
+
+
+    /* ======== VIEW FUNCTIONS ======== */
 
     /**
-     * @notice             creates a new market type
-     * @dev                current price should be in 9 decimals.
-     * @param _quoteToken  token used to deposit
-     * @param _market      [capacity (in OHM or quote), initial price / OHM (9 decimals), debt buffer (3 decimals)]
-     * @param _booleans    [capacity in quote, fixed term]
-     * @param _terms       [vesting length (if fixed term) or vested timestamp, conclusion timestamp]
-     * @param _intervals   [deposit interval (seconds), tune interval (seconds)]
-     * @return id_         ID of new bond market
+     *  @notice determine maximum bond size
+     *  @return uint
      */
-    function create(
-        IERC20 _quoteToken,
-        uint256[3] memory _market,
-        bool[2] memory _booleans,
-        uint256[2] memory _terms,
-        uint32[2] memory _intervals
-    ) external override onlyPolicy returns (uint256 id_) {
-        // the length of the program, in seconds
-        uint256 secondsToConclusion = _terms[1] - block.timestamp;
-
-        // the decimal count of the quote token
-        uint256 decimals = IERC20Metadata(address(_quoteToken)).decimals();
-
-        /*
-         * initial target debt is equal to capacity (this is the amount of debt
-         * that will decay over in the length of the program if price remains the same).
-         * it is converted into base token terms if passed in in quote token terms.
-         *
-         * 1e18 = ohm decimals (9) + initial price decimals (9)
-         */
-        uint64 targetDebt = uint64(_booleans[0] ? ((_market[0] * 1e18) / _market[1]) / 10**decimals : _market[0]);
-
-        /*
-         * max payout is the amount of capacity that should be utilized in a deposit
-         * interval. for example, if capacity is 1,000 OHM, there are 10 days to conclusion,
-         * and the preferred deposit interval is 1 day, max payout would be 100 OHM.
-         */
-        uint64 maxPayout = uint64((targetDebt * _intervals[0]) / secondsToConclusion);
-
-        /*
-         * max debt serves as a circuit breaker for the market. let's say the quote
-         * token is a stablecoin, and that stablecoin depegs. without max debt, the
-         * market would continue to buy until it runs out of capacity. this is
-         * configurable with a 3 decimal buffer (1000 = 1% above initial price).
-         * note that its likely advisable to keep this buffer wide.
-         * note that the buffer is above 100%. i.e. 10% buffer = initial debt * 1.1
-         */
-        uint256 maxDebt = targetDebt + ((targetDebt * _market[2]) / 1e5); // 1e5 = 100,000. 10,000 / 100,000 = 10%.
-
-        /*
-         * the control variable is set so that initial price equals the desired
-         * initial price. the control variable is the ultimate determinant of price,
-         * so we compute this last.
-         *
-         * price = control variable * debt ratio
-         * debt ratio = total debt / supply
-         * therefore, control variable = price / debt ratio
-         */
-        uint256 controlVariable = (_market[1] * treasury.baseSupply()) / targetDebt;
-
-        // depositing into, or getting info for, the created market uses this ID
-        id_ = markets.length;
-
-        markets.push(
-            Market({
-                quoteToken: _quoteToken,
-                capacityInQuote: _booleans[0],
-                capacity: _market[0],
-                totalDebt: targetDebt,
-                maxPayout: maxPayout,
-                purchased: 0,
-                sold: 0
-            })
-        );
-
-        terms.push(
-            Terms({
-                fixedTerm: _booleans[1],
-                controlVariable: uint64(controlVariable),
-                vesting: uint48(_terms[0]),
-                conclusion: uint48(_terms[1]),
-                maxDebt: uint64(maxDebt)
-            })
-        );
-
-        metadata.push(
-            Metadata({
-                lastTune: uint48(block.timestamp),
-                lastDecay: uint48(block.timestamp),
-                length: uint48(secondsToConclusion),
-                depositInterval: _intervals[0],
-                tuneInterval: _intervals[1],
-                quoteDecimals: uint8(decimals)
-            })
-        );
-
-        marketsForQuote[address(_quoteToken)].push(id_);
-
-        emit CreateMarket(id_, address(ohm), address(_quoteToken), _market[1]);
+    function maxPayout() public view returns ( uint ) {
+        return IERC20( OHM ).totalSupply().mul( terms.maxPayout ).div( 100000 );
     }
 
     /**
-     * @notice             disable existing market
-     * @param _id          ID of market to close
+     *  @notice calculate interest due for new bond
+     *  @param _value uint
+     *  @return uint
      */
-    function close(uint256 _id) external override onlyPolicy {
-        terms[_id].conclusion = uint48(block.timestamp);
-        markets[_id].capacity = 0;
-        emit CloseMarket(_id);
+    function payoutFor( uint _value ) public view returns ( uint ) {
+        return FixedPoint.fraction( _value, bondPrice() ).decode112with18().div( 1e16 );
     }
 
-    /* ======== EXTERNAL VIEW ======== */
 
     /**
-     * @notice             calculate current market price of quote token in base token
-     * @dev                accounts for debt and control variable decay since last deposit (vs _marketPrice())
-     * @param _id          ID of market
-     * @return             price for market in OHM decimals
-     *
-     * price is derived from the equation
-     *
-     * p = cv * dr
-     *
-     * where
-     * p = price
-     * cv = control variable
-     * dr = debt ratio
-     *
-     * dr = d / s
-     *
-     * where
-     * d = debt
-     * s = supply of token at market creation
-     *
-     * d -= ( d * (dt / l) )
-     *
-     * where
-     * dt = change in time
-     * l = length of program
+     *  @notice calculate current bond premium
+     *  @return price_ uint
      */
-    function marketPrice(uint256 _id) public view override returns (uint256) {
-        return (currentControlVariable(_id) * debtRatio(_id)) / (10**metadata[_id].quoteDecimals);
-    }
-
-    /**
-     * @notice             payout due for amount of quote tokens
-     * @dev                accounts for debt and control variable decay so it is up to date
-     * @param _amount      amount of quote tokens to spend
-     * @param _id          ID of market
-     * @return             amount of OHM to be paid in OHM decimals
-     *
-     * @dev 1e18 = ohm decimals (9) + market price decimals (9)
-     */
-    function payoutFor(uint256 _amount, uint256 _id) external view override returns (uint256) {
-        Metadata memory meta = metadata[_id];
-        return (_amount * 1e18) / marketPrice(_id) / 10**meta.quoteDecimals;
-    }
-
-    /**
-     * @notice             calculate current ratio of debt to supply
-     * @dev                uses current debt, which accounts for debt decay since last deposit (vs _debtRatio())
-     * @param _id          ID of market
-     * @return             debt ratio for market in quote decimals
-     */
-    function debtRatio(uint256 _id) public view override returns (uint256) {
-        return (currentDebt(_id) * (10**metadata[_id].quoteDecimals)) / treasury.baseSupply();
-    }
-
-    /**
-     * @notice             calculate debt factoring in decay
-     * @dev                accounts for debt decay since last deposit
-     * @param _id          ID of market
-     * @return             current debt for market in OHM decimals
-     */
-    function currentDebt(uint256 _id) public view override returns (uint256) {
-        return markets[_id].totalDebt - debtDecay(_id);
-    }
-
-    /**
-     * @notice             amount of debt to decay from total debt for market ID
-     * @param _id          ID of market
-     * @return             amount of debt to decay
-     */
-    function debtDecay(uint256 _id) public view override returns (uint64) {
-        Metadata memory meta = metadata[_id];
-
-        uint256 secondsSince = block.timestamp - meta.lastDecay;
-
-        return uint64((markets[_id].totalDebt * secondsSince) / meta.length);
-    }
-
-    /**
-     * @notice             up to date control variable
-     * @dev                accounts for control variable adjustment
-     * @param _id          ID of market
-     * @return             control variable for market in OHM decimals
-     */
-    function currentControlVariable(uint256 _id) public view returns (uint256) {
-        (uint64 decay, , ) = _controlDecay(_id);
-        return terms[_id].controlVariable - decay;
-    }
-
-    /**
-     * @notice             is a given market accepting deposits
-     * @param _id          ID of market
-     */
-    function isLive(uint256 _id) public view override returns (bool) {
-        return (markets[_id].capacity != 0 && terms[_id].conclusion > block.timestamp);
-    }
-
-    /**
-     * @notice returns an array of all active market IDs
-     */
-    function liveMarkets() external view override returns (uint256[] memory) {
-        uint256 num;
-        for (uint256 i = 0; i < markets.length; i++) {
-            if (isLive(i)) num++;
+    function bondPrice() public view returns ( uint price_ ) {        
+        price_ = terms.controlVariable.mul( debtRatio() ).add( 1000000000 ).div( 1e7 );
+        if ( price_ < terms.minimumPrice ) {
+            price_ = terms.minimumPrice;
         }
+    }
 
-        uint256[] memory ids = new uint256[](num);
-        uint256 nonce;
-        for (uint256 i = 0; i < markets.length; i++) {
-            if (isLive(i)) {
-                ids[nonce] = i;
-                nonce++;
-            }
+    /**
+     *  @notice calculate current bond price and remove floor if above
+     *  @return price_ uint
+     */
+    function _bondPrice() internal returns ( uint price_ ) {
+        price_ = terms.controlVariable.mul( debtRatio() ).add( 1000000000 ).div( 1e7 );
+        if ( price_ < terms.minimumPrice ) {
+            price_ = terms.minimumPrice;        
+        } else if ( terms.minimumPrice != 0 ) {
+            terms.minimumPrice = 0;
         }
-        return ids;
     }
 
     /**
-     * @notice             returns an array of all active market IDs for a given quote token
-     * @param _token       quote token to check for
+     *  @notice converts bond price to DAI value
+     *  @return price_ uint
      */
-    function liveMarketsFor(address _token) external view override returns (uint256[] memory) {
-        uint256[] memory mkts = marketsForQuote[_token];
-        uint256 num;
-
-        for (uint256 i = 0; i < mkts.length; i++) {
-            if (isLive(mkts[i])) num++;
+    function bondPriceInUSD() public view returns ( uint price_ ) {
+        if( isLiquidityBond ) {
+            price_ = bondPrice().mul( IBondCalculator( bondCalculator ).markdown( principle ) ).div( 100 );
+        } else {
+            price_ = bondPrice().mul( 10 ** IERC20( principle ).decimals() ).div( 100 );
         }
+    }
 
-        uint256[] memory ids = new uint256[](num);
-        uint256 nonce;
 
-        for (uint256 i = 0; i < mkts.length; i++) {
-            if (isLive(mkts[i])) {
-                ids[nonce] = mkts[i];
-                nonce++;
-            }
+    /**
+     *  @notice calculate current ratio of debt to OHM supply
+     *  @return debtRatio_ uint
+     */
+    function debtRatio() public view returns ( uint debtRatio_ ) {   
+        uint supply = IERC20( OHM ).totalSupply();
+        if (supply == 0) {
+            
         }
-        return ids;
-    }
-
-    /* ======== INTERNAL VIEW ======== */
-
-    /**
-     * @notice                  calculate current market price of quote token in base token
-     * @dev                     see marketPrice() for explanation of price computation
-     * @dev                     uses info from storage because data has been updated before call (vs marketPrice())
-     * @param _id               market ID
-     * @return                  price for market in OHM decimals
-     */
-    function _marketPrice(uint256 _id) internal view returns (uint256) {
-        return (terms[_id].controlVariable * _debtRatio(_id)) / (10**metadata[_id].quoteDecimals);
+        debtRatio_ = FixedPoint.fraction( 
+            currentDebt().mul( 1e9 ), 
+            supply
+        ).decode112with18().div( 1e18 );
     }
 
     /**
-     * @notice                  calculate debt factoring in decay
-     * @dev                     uses info from storage because data has been updated before call (vs debtRatio())
-     * @param _id               market ID
-     * @return                  current debt for market in quote decimals
+     *  @notice debt ratio in same terms for reserve or liquidity bonds
+     *  @return uint
      */
-    function _debtRatio(uint256 _id) internal view returns (uint256) {
-        return (markets[_id].totalDebt * (10**metadata[_id].quoteDecimals)) / treasury.baseSupply();
+    function standardizedDebtRatio() external view returns ( uint ) {
+        if ( isLiquidityBond ) {
+            return debtRatio().mul( IBondCalculator( bondCalculator ).markdown( principle ) ).div( 1e9 );
+        } else {
+            return debtRatio();
+        }
     }
 
     /**
-     * @notice                  amount to decay control variable by
-     * @param _id               ID of market
-     * @return decay_           change in control variable
-     * @return secondsSince_    seconds since last change in control variable
-     * @return active_          whether or not change remains active
+     *  @notice calculate debt factoring in decay
+     *  @return uint
      */
-    function _controlDecay(uint256 _id)
-        internal
-        view
-        returns (
-            uint64 decay_,
-            uint48 secondsSince_,
-            bool active_
-        )
-    {
-        Adjustment memory info = adjustments[_id];
-        if (!info.active) return (0, 0, false);
+    function currentDebt() public view returns ( uint ) {
+        return totalDebt.sub( debtDecay() );
+    }
 
-        secondsSince_ = uint48(block.timestamp) - info.lastAdjustment;
+    /**
+     *  @notice amount to decay total debt by
+     *  @return decay_ uint
+     */
+    function debtDecay() public view returns ( uint decay_ ) {
+        uint timeSinceLast = block.timestamp.sub( lastDecay );
+        decay_ = totalDebt.mul( timeSinceLast ).div( terms.vestingTerm );
+        if ( decay_ > totalDebt ) {
+            decay_ = totalDebt;
+        }
+    }
 
-        active_ = secondsSince_ < info.timeToAdjusted;
-        decay_ = active_ ? (info.change * secondsSince_) / info.timeToAdjusted : info.change;
+
+    /**
+     *  @notice calculate how far into vesting a depositor is
+     *  @param _depositor address
+     *  @return percentVested_ uint
+     */
+    function percentVestedFor( address _depositor ) public view returns ( uint percentVested_ ) {
+        Bond memory bond = bondInfo[ _depositor ];
+        uint secondsSinceLast = block.timestamp.sub( bond.lastTime );
+        uint vesting = bond.vesting;
+
+        if ( vesting > 0 ) {
+            percentVested_ = secondsSinceLast.mul( 10000 ).div( vesting );
+        } else {
+            percentVested_ = 0;
+        }
+    }
+
+    /**
+     *  @notice calculate amount of OHM available for claim by depositor
+     *  @param _depositor address
+     *  @return pendingPayout_ uint
+     */
+    function pendingPayoutFor( address _depositor ) external view returns ( uint pendingPayout_ ) {
+        uint percentVested = percentVestedFor( _depositor );
+        uint payout = bondInfo[ _depositor ].payout;
+
+        if ( percentVested >= 10000 ) {
+            pendingPayout_ = payout;
+        } else {
+            pendingPayout_ = payout.mul( percentVested ).div( 10000 );
+        }
+    }
+
+
+
+
+    /* ======= AUXILLIARY ======= */
+
+    /**
+     *  @notice allow anyone to send lost tokens (excluding principle or OHM) to the DAO
+     *  @return bool
+     */
+    function recoverLostToken( address _token ) external returns ( bool ) {
+        require( _token != OHM );
+        require( _token != principle );
+        IERC20( _token ).safeTransfer( DAO, IERC20( _token ).balanceOf( address(this) ) );
+        return true;
     }
 }
