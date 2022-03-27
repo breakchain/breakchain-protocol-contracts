@@ -51,7 +51,7 @@ Local Setup Steps:
 1. The file hardhat.config.js contains deployment settings. When you run the deployment command, you'll be referencing this values.
 1. To deploy, run this command in the terminal `npx hardhat --network ftmTestnet deploy`. Be sure that the crypto wallet in the config has enough to cover gas fees.
 1. After deployment is complete, go to the "scripts" folder. Run step_1.js, step_2.js, step_3.js and so on until you've run all 11 steps. Follow this example command `npx hardhat run step_1.js --network ftmTestnet` and replace `step_1.js` with the other script names as you deploy one at a time.
-1. Once all scripts are deployed, go to the Tresury contract and call the deposit function using your intended reserve asset. This will provide the Treasury with initial reserves and give you XCHAIN.
+1. Once all scripts are deployed, go to the Treasury contract and call the deposit function using your intended reserve asset. This will provide the Treasury with initial reserves and give you XCHAIN.
 1. Now that the Treasury is funded, you can stake, unstake, bond, and redeem.
 
 
