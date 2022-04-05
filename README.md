@@ -10,6 +10,18 @@
 - The Staking contract is where users can stake their XCHAIN in exchange for sXCHAIN. During every rebase, staking rewards are distributed to holders of sXCHAIN. When user's no longer wish to stake, they can call the unstake method. If the user doesn't have XCHAIN, they won't be able to stake.
 - There can be multiple reserve assets. To add another reserve asset, simply deploy a BondDepository contract for the new asset, initialize the bond terms, add the BondDepository address to the treasury, and add the staking address to the BondDepository (view examples in the scripts folder). At any point, the bond terms can be adjusted.
 
+## Tokenomics
+
+- When the protocol is launched, there is no XCHAIN. XCHAIN becomes minted in two ways: Bonding and Staking. 
+- Anytime a user buys a bond, this will create new XCHAIN. The protocol calculates the bond price using the control variable and the debt ratio. If the bond price is $100, and the user buys 2 bonds for $200, the user will receive 2 XCHAIN. In this case, the treasury mints 2 XCHAIN. 
+- Staking is the other way XCHAIN is minted. Anytime there is a rebase, depending on how many epochs have passed, depending on the rewardRate, and depending on how many XCHAIN is staked, the treasury will mint more XCHAIN.
+- These are the only 2 ways for XCHAIN to be minted. The overall tokenomics depends on how many users buy bonds and how many XCHAIN are staked.
+
+## Bond Assets and Reserve Assets
+
+- Bond Assets are the reserve assets. When the protocol launches, the first bond asset will be UST (TerraUSD), a stablecoin governed by the Terra protocol and pegged to the USD using Luna reserves. Anytime a user purchases a bond using UST, the Treasury of the Breakchain Protocol receives UST and uses this as the reserve asset. This reserve asset maintains the value of XCHAIN and helps determine bond prices.
+
+
 
 ## Mainnet Contracts & Addresses
 
