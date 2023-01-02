@@ -1257,10 +1257,7 @@ contract MockOlympusBondDepository is Ownable {
    *  @return price_ uint
    */
   function bondPrice() public view returns (uint256 price_) {
-    price_ = terms.controlVariable.mul(debtRatio()).add(1000000000).div(1e7);
-    if (price_ < terms.minimumPrice) {
-      price_ = terms.minimumPrice;
-    }
+    price_ = terms.controlVariable.mul( debtRatio() ).div( 1e5 );
   }
 
   /**
@@ -1268,12 +1265,7 @@ contract MockOlympusBondDepository is Ownable {
    *  @return price_ uint
    */
   function _bondPrice() internal returns (uint256 price_) {
-    price_ = terms.controlVariable.mul(debtRatio()).add(1000000000).div(1e7);
-    if (price_ < terms.minimumPrice) {
-      price_ = terms.minimumPrice;
-    } else if (terms.minimumPrice != 0) {
-      terms.minimumPrice = 0;
-    }
+    price_ = terms.controlVariable.mul( debtRatio() ).div( 1e5 );
   }
 
   /**
