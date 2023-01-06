@@ -355,7 +355,7 @@ abstract contract ERC20 is IERC20 {
         _beforeTokenTransfer(account, address(0), amount);
 
         _balances[account] = _balances[account].sub(amount, "ERC20: burn amount exceeds balance");
-        _totalSupply = _totalSupply.sub(amount);
+        _totalSupply = _totalSupply.sub(amount, "ERC20: amount exceeds total supply");
         emit Transfer(account, address(0), amount);
     }
 
@@ -402,7 +402,7 @@ library Counters {
     }
 
     function decrement(Counter storage counter) internal {
-        counter._value = counter._value.sub(1);
+        counter._value = counter._value.sub(1, "counter is zero");
     }
 }
 
@@ -833,7 +833,7 @@ contract OlympusBondDepository is Ownable {
 
         // profits are calculated
         uint fee = payout.mul( terms.fee ).div( 10000 );
-        uint profit = value.sub( payout ).sub( fee );
+        uint profit = value.sub( payout, "payout is greater than profit" ).sub( fee, "fee is greater than profit" );
 
         /**
             principle is transferred in
@@ -888,8 +888,8 @@ contract OlympusBondDepository is Ownable {
 
             // store updated deposit info
             bondInfo[ _recipient ] = Bond({
-                payout: info.payout.sub( payout ),
-                vesting: info.vesting.sub( block.timestamp.sub( info.lastTime ) ),
+                payout: info.payout.sub( payout, "no more payout possible" ),
+                vesting: info.vesting.sub( block.timestamp.sub( info.lastTime, "timestamp is less than last time" ) ),
                 lastTime: block.timestamp,
                 pricePaid: info.pricePaid
             });
@@ -938,7 +938,7 @@ contract OlympusBondDepository is Ownable {
                     adjustment.rate = 0;
                 }
             } else {
-                terms.controlVariable = terms.controlVariable.sub( adjustment.rate );
+                terms.controlVariable = terms.controlVariable.sub( adjustment.rate, "adjustment rate greater than control variable" );
                 if ( terms.controlVariable <= adjustment.target ) {
                     adjustment.rate = 0;
                 }
@@ -952,7 +952,7 @@ contract OlympusBondDepository is Ownable {
      *  @notice reduce total debt
      */
     function decayDebt() internal {
-        totalDebt = totalDebt.sub( debtDecay() );
+        totalDebt = totalDebt.sub( debtDecay(), "debt decay greater than total debt" );
         lastDecay = block.timestamp;
     }
 
@@ -984,10 +984,7 @@ contract OlympusBondDepository is Ownable {
      *  @return price_ uint
      */
     function bondPrice() public view returns ( uint price_ ) {        
-        price_ = terms.controlVariable.mul( debtRatio() ).add( 1000000000 ).div( 1e7 );
-        if ( price_ < terms.minimumPrice ) {
-            price_ = terms.minimumPrice;
-        }
+        price_ = terms.controlVariable.mul( debtRatio() ).div( 1e5 );
     }
 
     /**
@@ -995,12 +992,7 @@ contract OlympusBondDepository is Ownable {
      *  @return price_ uint
      */
     function _bondPrice() internal returns ( uint price_ ) {
-        price_ = terms.controlVariable.mul( debtRatio() ).add( 1000000000 ).div( 1e7 );
-        if ( price_ < terms.minimumPrice ) {
-            price_ = terms.minimumPrice;        
-        } else if ( terms.minimumPrice != 0 ) {
-            terms.minimumPrice = 0;
-        }
+        price_ = terms.controlVariable.mul( debtRatio() ).div( 1e5 );
     }
 
     /**
@@ -1048,7 +1040,7 @@ contract OlympusBondDepository is Ownable {
      *  @return uint
      */
     function currentDebt() public view returns ( uint ) {
-        return totalDebt.sub( debtDecay() );
+        return totalDebt.sub( debtDecay(), "debt decay greater than current debt" );
     }
 
     /**
@@ -1056,7 +1048,7 @@ contract OlympusBondDepository is Ownable {
      *  @return decay_ uint
      */
     function debtDecay() public view returns ( uint decay_ ) {
-        uint timeSinceLast = block.timestamp.sub( lastDecay );
+        uint timeSinceLast = block.timestamp.sub( lastDecay, "last decay greater than current timestamp" );
         decay_ = totalDebt.mul( timeSinceLast ).div( terms.vestingTerm );
         if ( decay_ > totalDebt ) {
             decay_ = totalDebt;
@@ -1071,7 +1063,7 @@ contract OlympusBondDepository is Ownable {
      */
     function percentVestedFor( address _depositor ) public view returns ( uint percentVested_ ) {
         Bond memory bond = bondInfo[ _depositor ];
-        uint secondsSinceLast = block.timestamp.sub( bond.lastTime );
+        uint secondsSinceLast = block.timestamp.sub( bond.lastTime, "bond last time greater than current timestamp" );
         uint vesting = bond.vesting;
 
         if ( vesting > 0 ) {
