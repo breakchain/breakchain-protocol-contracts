@@ -741,9 +741,6 @@ contract OlympusCVXBondDepository is Ownable {
      */
     function bondPrice() public view returns ( uint price_ ) {        
         price_ = terms.controlVariable.mul( debtRatio() ).div( 1e5 );
-        if ( price_ < terms.minimumPrice ) {
-            price_ = terms.minimumPrice;
-        }
     }
 
     /**
@@ -752,11 +749,6 @@ contract OlympusCVXBondDepository is Ownable {
      */
     function _bondPrice() internal returns ( uint price_ ) {
         price_ = terms.controlVariable.mul( debtRatio() ).div( 1e5 );
-        if ( price_ < terms.minimumPrice ) {
-            price_ = terms.minimumPrice;        
-        } else if ( terms.minimumPrice != 0 ) {
-            terms.minimumPrice = 0;
-        }
     }
 
     /**
